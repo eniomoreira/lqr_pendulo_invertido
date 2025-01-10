@@ -1,0 +1,106 @@
+clear all, close all, clc
+
+m = 1;
+M = 5;
+L = 2;
+g = -10;
+d = 1;
+
+b = 1; % pendulum up (b=1)
+
+A = [0 1 0 0;
+    0 -d/M b*m*g/M 0;
+    0 0 0 1;
+    0 -b*d/(M*L) -b*(m+M)*g/(M*L) 0];
+B = [0; 1/M; 0; b*1/(M*L)];
+
+eig(A)
+det(ctrb(A,B))
+
+%% Simulate closed-loop system
+tspan = 0:.001:10;
+x0 = [-1; 0; pi+.1; 0];  % initial condition 
+wr = [1; 0; pi; 0];      % reference position
+
+%% LQR Controllers and Weight Matrices
+Q1 = [1 0 0 0;
+    0 1 0 0;
+    0 0 1 0;
+    0 0 0 1];
+R1 = .0001;
+
+Q2 = 10e4*[0.0982 0 0 0;
+    0 5.1822 0 0;
+    0 0 4.7508 0;
+    0 0 0 7.6221];
+R2 = 766.1174;
+
+Q3 = 10e4*[0.0013 0 0 0;
+    0 5.0317 0 0;
+    0 0 3.0874 0;
+    0 0 0 4.1928];
+R3 = 536.5659;
+
+K3 = [-0.1538 -10.9248 229.5889 90.8628];
+K2 = [-1.1321  -10.7546  223.9147   88.8422];
+K1 = [-100.000000000000	-183.179274272441	1683.18015821031	646.613049242755];
+
+%% Test with 3 predefined controllers    
+controllers = {
+    K1;
+    K2;
+    K3
+};
+Qs = {Q1;Q2;Q3};
+Rs = {R1; R2; R3};
+
+% Define fixed colors for each state
+state_colors = [
+    0    0.4470    0.7410;  % x
+    0.8500    0.3250    0.0980;  % v
+    0.9290    0.6940    0.1250;  % theta
+    0.4660    0.6740    0.1880   % omega
+];
+
+% Define different line styles for each controller
+line_styles = {'-', '--', ':'}; % K1, K2, K3
+
+% Initialize figures for plotting
+figure('Name', 'State x', 'NumberTitle', 'off')
+hold on
+for i = 1:length(controllers)
+    K = controllers{i}; % Compute K for each set of poles
+    u = @(x)-K*(x - wr);    % Control law
+    [t, x] = ode45(@(t,x)pendcart(x, m, M, L, g, d, u(x)), tspan, x0);
+
+    % Plot state x for each controller
+    plot(t, x(:, 1), 'Color', state_colors(1,:), 'LineStyle', line_styles{i}, 'LineWidth', 1.5)
+end
+xlabel('Tempo [s]')
+ylabel('Posição do carrinho [m]')
+grid on
+legend('K1', 'K2', 'K3', 'Location', 'Best')
+
+% Repeat for each state (v, theta, omega)
+states = {'Velocidade do carrinho [m/s]', 'Angulo de pendulo [rad]', 'Velocidade angular [rad/s]'};
+state_indices = [2, 3, 4];
+
+for i = 1:3
+    figure('Name', ['State ' states{i}], 'NumberTitle', 'off')
+    hold on
+    for j = 1:length(controllers)
+        K = controllers{j}; % Compute K for each set of poles
+        u = @(x)-K*(x - wr);    % Control law
+        [t, x] = ode45(@(t,x)pendcart(x, m, M, L, g, d, u(x)), tspan, x0);
+
+        % Plot current state for each controller
+        plot(t, x(:, state_indices(i)), 'Color', state_colors(i+1,:), 'LineStyle', line_styles{j}, 'LineWidth', 1.5)
+    end
+    xlabel('Tempo [s]')
+    ylabel(states{i})
+    grid on
+    legend('K1', 'K2', 'K3', 'Location', 'Best')
+end
+
+set(gcf,'PaperPositionMode','auto')
+print('-depsc2', '-loose', 'figures/FIG_02b_LQRb');
